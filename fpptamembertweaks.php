@@ -34,7 +34,16 @@ function fpptamembertweaks_civicrm_pageRun($page) {
       }
     }
     $page->assign('activeMembers', $activeMembers);
-    $a = 1;
+
+    // Replace "Renew Now" in renew links with "Renew for YYYY", where YYYY is a
+    // 4-digit representation of the coming year.
+    // If we don't use addString(), this string may not be replaced using ts() in JavaScript.
+    CRM_Core_Resources::singleton()->addString('Renew Now');
+    $renewForNextYearLabel = E::ts('Renew for %1', [
+      '1' => date('Y', strtotime('+1 year')),
+    ]);
+    CRM_Core_Resources::singleton()->addVars('fpptamembertweaks', ['renewForNextYearLabel' => $renewForNextYearLabel]);
+    CRM_Core_Resources::singleton()->addScriptFile('com.joineryhq.fpptamembertweaks', 'js/CRM_Contact_Page_View_UserDashBoard.js');
 
   }
 }

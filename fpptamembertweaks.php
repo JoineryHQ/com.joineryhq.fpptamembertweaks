@@ -6,6 +6,40 @@ use CRM_Fpptamembertweaks_ExtensionUtil as E;
 // phpcs:enable
 
 /**
+ * Month-day (MM/DD) of the date each year on which membership renewals should
+ * open.
+ */
+define('FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE', '10/15');
+
+/**
+ * Implements hook_civicrm_alterContent().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_alterContent
+ */
+function fpptamembertweaks_civicrm_pageRun($page) {
+  $pageName = $page->getVar('_name');
+  if ($pageName == 'CRM_Contact_Page_View_UserDashBoard') {
+    // Strip Active Memberships of any CPPT-type memberships.
+    $activeMembers = $page->get_template_vars('activeMembers');
+    foreach ($activeMembers as &$activeMember) {
+      $hideRenew = TRUE;
+      if (
+        _fpptamembertweaks_is_current_year_renewal_open()
+        && _fpptamembertweaks_membership_expires_current_year_or_before($activeMember)
+      ) {
+        $hideRenew = FALSE;
+      }
+      if ($hideRenew) {
+        unset($activeMember['renewPageId']);
+      }
+    }
+    $page->assign('activeMembers', $activeMembers);
+    $a = 1;
+
+  }
+}
+
+/**
  * Implements hook_civicrm_config().
  *
  * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_config/
@@ -143,30 +177,32 @@ function fpptamembertweaks_civicrm_themes(&$themes) {
   _fpptamembertweaks_civix_civicrm_themes($themes);
 }
 
-// --- Functions below this ship commented out. Uncomment as required. ---
+/**
+ * Get the unix timestamp of midnight beginning the day of FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE
+ * in the current year.
+ * @return Boolean
+ */
+function _fpptamembertweaks_get_current_year_renewal_open_timestamp() {
+  return strtotime(FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE);
+}
 
 /**
- * Implements hook_civicrm_preProcess().
- *
- * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_preProcess
+ * Determine whether or not we have passed the renewals open date for the current year.
+ * @return Boolean
  */
-//function fpptamembertweaks_civicrm_preProcess($formName, &$form) {
-//
-//}
+function _fpptamembertweaks_is_current_year_renewal_open() {
+  return (time() > _fpptamembertweaks_get_current_year_renewal_open_timestamp());
+}
 
 /**
- * Implements hook_civicrm_navigationMenu().
- *
- * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_navigationMenu
+ * For a given membership, determine whether end_date is on or before the last
+ * day of the current year.
+ * @param Array $membership An array of membership properties; this array is expected
+ *  to have an element 'end_date' containing the value of civicrm_membership.end_date
+ * @return Boolean
  */
-//function fpptamembertweaks_civicrm_navigationMenu(&$menu) {
-//  _fpptamembertweaks_civix_insert_navigation_menu($menu, 'Mailings', array(
-//    'label' => E::ts('New subliminal message'),
-//    'name' => 'mailing_subliminal_message',
-//    'url' => 'civicrm/mailing/subliminal',
-//    'permission' => 'access CiviMail',
-//    'operator' => 'OR',
-//    'separator' => 0,
-//  ));
-//  _fpptamembertweaks_civix_navigationMenu($menu);
-//}
+function _fpptamembertweaks_membership_expires_current_year_or_before($membership) {
+  $lastDayOfCurrentYear = strtotime('12/31');
+  $endDate = strtotime($membership['end_date']);
+  return ($endDate <= $lastDayOfCurrentYear);
+}

@@ -12,9 +12,40 @@ use CRM_Fpptamembertweaks_ExtensionUtil as E;
 define('FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE', '10/15');
 
 /**
- * Implements hook_civicrm_alterContent().
+ * Implements hook_civicrm_pre().
  *
- * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_alterContent
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_pre
+ */
+function fpptamembertweaks_civicrm_pre($op, $objectName, $objectId, &$params) {
+  if ($objectName == 'Membership'
+    && ($op == 'create' || $op == 'edit')
+  ) {
+    if (
+      // If we're in the context of a front-end contribution page
+      $_REQUEST['q'] == 'civicrm/contribute/transact'
+      // and a payment processor is selected (i.e., this is not a "pay later" contribution)
+      && (!$params['contribution']->is_pay_later)
+      // and this is the primary member (i.e., not a related membership)
+      && (empty($params['owner_membership_id']) || $params['owner_membership_id'] == $objectId)
+      // and this is not a test transaction
+      && (!$params['is_test'])
+    ) {
+      // Ensure we're only doing this for associate and pension_board memberships.
+      $countValidMembershipTypes = civicrm_api3('MembershipType', 'getcount', [
+        'name' => ['IN' => ["associate", "pension board"]],
+        'id' => $objectRef->membership_type_id,
+      ]);
+      if ($countValidMembershipTypes) {
+        $params['end_date'] = date('Y', strtotime('+1 year')) . '1231';
+      }
+    }
+  }
+}
+
+/**
+ * Implements hook_civicrm_pageRun().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_pageRun
  */
 function fpptamembertweaks_civicrm_pageRun($page) {
   $pageName = $page->getVar('_name');
@@ -44,7 +75,6 @@ function fpptamembertweaks_civicrm_pageRun($page) {
     ]);
     CRM_Core_Resources::singleton()->addVars('fpptamembertweaks', ['renewForNextYearLabel' => $renewForNextYearLabel]);
     CRM_Core_Resources::singleton()->addScriptFile('com.joineryhq.fpptamembertweaks', 'js/CRM_Contact_Page_View_UserDashBoard.js');
-
   }
 }
 

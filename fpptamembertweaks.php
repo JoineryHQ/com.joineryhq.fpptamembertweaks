@@ -66,6 +66,21 @@ function fpptamembertweaks_civicrm_pageRun($page) {
     }
     $page->assign('activeMembers', $activeMembers);
 
+    $inActiveMembers = $page->get_template_vars('inActiveMembers');
+    foreach ($inActiveMembers as &$inActiveMember) {
+      $hideRenew = TRUE;
+      if (
+        _fpptamembertweaks_is_current_year_renewal_open()
+        && _fpptamembertweaks_membership_expires_current_year_or_before($inActiveMember)
+      ) {
+        $hideRenew = FALSE;
+      }
+      if ($hideRenew) {
+        unset($inActiveMember['renewPageId']);
+      }
+    }
+    $page->assign('inActiveMembers', $inActiveMembers);
+
     // Replace "Renew Now" in renew links with "Renew for YYYY", where YYYY is a
     // 4-digit representation of the coming year.
     // If we don't use addString(), this string may not be replaced using ts() in JavaScript.

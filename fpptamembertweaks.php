@@ -56,7 +56,7 @@ function fpptamembertweaks_civicrm_alterTemplateFile($formName, &$form, $context
  *
  * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_buildAmount
  */
-function fpptamembertweaks_civicrm_buildAmount( $pageType, &$form, &$amount ) {
+function fpptamembertweaks_civicrm_buildAmount($pageType, &$form, &$amount) {
   // Only on the contribution page main form:
   if (get_class($form) == 'CRM_Contribute_Form_Contribution_Main') {
     // Shorthand var for all membership types originally available on this form.
@@ -67,7 +67,7 @@ function fpptamembertweaks_civicrm_buildAmount( $pageType, &$form, &$amount ) {
     $disallowedMemberships = [];
     // Loop through all price fields looking for any that are tied to memberships.
     foreach ($amount as $fieldId => &$field) {
-      foreach($field['options'] as $optionId => $option) {
+      foreach ($field['options'] as $optionId => $option) {
         $membershipTypeId = $option['membership_type_id'];
         if (!empty($option['membership_type_id'])) {
           // Note that we originally offered this membership type.
@@ -321,7 +321,6 @@ function _fpptamembertweaks_is_renewal_disallowed(array $membership) {
   return $disallow;
 }
 
-
 function _fpptamembertweaks_get_timestamp_when_membership_can_renew(array $membership) {
   if (!_fpptamembertweaks_membership_is_protected_type($membership)) {
     // If this is not a protected type, we'll let them renew anytime.
@@ -334,12 +333,11 @@ function _fpptamembertweaks_get_timestamp_when_membership_can_renew(array $membe
 
 function _fpptamembertweaks_membership_is_protected_type($membership) {
   // convert membership to array if it's an object.
-  $membership = (array)$membership;
+  $membership = (array) $membership;
   // Ensure we're only doing this for associate and pension_board memberships.
   $protectedTypeIds = [1, 2];
   return (in_array(strtolower($membership['membership_type_id']), $protectedTypeIds));
 }
-
 
 function _fpptamembertweaks_get_user_memberships_of_type($membershipTypeId) {
   $cid = CRM_Core_Session::singleton()->getLoggedInContactID();

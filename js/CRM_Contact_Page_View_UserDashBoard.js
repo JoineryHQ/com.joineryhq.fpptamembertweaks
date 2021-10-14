@@ -9,7 +9,7 @@
   var tsRenewNow = ts('Renew Now');
   CRM.$('.crm-dashboard-civimember div#memberships table td:nth-child(6) a, .crm-dashboard-civimember div#ltype table td:nth-child(5) a').each(function(idx, el){
     // Find each of these links and replace the appropriate text in the link html.
-    var el = CRM.$(el);
+    el = CRM.$(el);
     el.html(el.html().replace(tsRenewNow, CRM.vars.fpptamembertweaks.renewForNextYearLabel));
   });
 })(CRM.$ || cj);

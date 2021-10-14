@@ -302,6 +302,12 @@ function _fpptamembertweaks_is_current_year_renewal_cutoff_passed() {
   return (time() >= _fpptamembertweaks_get_current_year_renewal_open_timestamp());
 }
 
+/**
+ * Use the current date to determine the appropriate end_date for memberships
+ * renewed today.
+ *
+ * @return string Date in the format 'YYYYMMDD'
+ */
 function _fpptamembertweaks_get_end_date_for_current_renewal_period() {
   // Is today on or after the cutoff date?
   if (_fpptamembertweaks_is_current_year_renewal_cutoff_passed()) {
@@ -315,12 +321,25 @@ function _fpptamembertweaks_get_end_date_for_current_renewal_period() {
   return $endDate;
 }
 
+/**
+ * Determine whether a given membership can be renewed today.
+ *
+ * @param array $membership A membership as returned by api3 membership.getSingle
+ * @return boolean
+ */
 function _fpptamembertweaks_is_renewal_disallowed(array $membership) {
   // If the current time is less than the time when renewal is allowed, then disallow.
   $disallow = (time() < _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership));
   return $disallow;
 }
 
+/**
+ * Get a timestemp representing midnight beginning the first day when a given
+ * membership can be renewed.
+ *
+ * @param array $membership A membership as returned by api3 membership.getSingle
+ * @return int
+ */
 function _fpptamembertweaks_get_timestamp_when_membership_can_renew(array $membership) {
   if (!_fpptamembertweaks_membership_is_protected_type($membership)) {
     // If this is not a protected type, we'll let them renew anytime.
@@ -331,6 +350,15 @@ function _fpptamembertweaks_get_timestamp_when_membership_can_renew(array $membe
   return strtotime($expirationYear . '/' . FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE);
 }
 
+/**
+ * Determine whether a given membership is of a type for which we're protecting renewals
+ * (Associate and Pension Board).
+ *
+ * @param array|object $membership
+ *    A membership, either as an object of type CRM_Member_DAO_Membership, or
+ *    an array as returned by api3 membership.getSingle.
+ * @return bool
+ */
 function _fpptamembertweaks_membership_is_protected_type($membership) {
   // convert membership to array if it's an object.
   $membership = (array) $membership;
@@ -339,6 +367,13 @@ function _fpptamembertweaks_membership_is_protected_type($membership) {
   return (in_array(strtolower($membership['membership_type_id']), $protectedTypeIds));
 }
 
+/**
+ * For a given membership type ID, get all memberships of that type held by
+ * the current user.
+ *
+ * @param int $membershipTypeId
+ * @return array Array of membership types, each one an array as returned by api3 membership.getSingle
+ */
 function _fpptamembertweaks_get_user_memberships_of_type($membershipTypeId) {
   $cid = CRM_Core_Session::singleton()->getLoggedInContactID();
   $membershipGet = civicrm_api3('Membership', 'get', [
@@ -346,5 +381,4 @@ function _fpptamembertweaks_get_user_memberships_of_type($membershipTypeId) {
     'membership_type_id' => $membershipTypeId,
   ]);
   return $membershipGet['values'];
-
 }

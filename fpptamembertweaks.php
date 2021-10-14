@@ -279,7 +279,7 @@ function fpptamembertweaks_civicrm_entityTypes(&$entityTypes) {
 }
 
 /**
- * Implements hook_civicrm_thems().
+ * Implements hook_civicrm_themes().
  */
 function fpptamembertweaks_civicrm_themes(&$themes) {
   _fpptamembertweaks_civix_civicrm_themes($themes);
@@ -300,19 +300,6 @@ function _fpptamembertweaks_get_current_year_renewal_open_timestamp() {
  */
 function _fpptamembertweaks_is_current_year_renewal_cutoff_passed() {
   return (time() >= _fpptamembertweaks_get_current_year_renewal_open_timestamp());
-}
-
-/**
- * For a given membership, determine whether end_date is after the last
- * day of the current year.
- * @param Array $membership An array of membership properties; this array is expected
- *  to have an element 'end_date' containing the value of civicrm_membership.end_date
- * @return Boolean
- */
-function _fpptamembertweaks_membership_expires_after_current_year(array $membership) {
-  $lastDayOfCurrentYear = strtotime('12/31');
-  $endDate = strtotime($membership['end_date']);
-  return ($endDate > $lastDayOfCurrentYear);
 }
 
 function _fpptamembertweaks_get_end_date_for_current_renewal_period() {
@@ -343,18 +330,6 @@ function _fpptamembertweaks_get_timestamp_when_membership_can_renew(array $membe
   // Otherwise, they can renew after renewal-open-date in the year of their expiration.
   $expirationYear = date('Y', strtotime($membership['end_date']));
   return strtotime($expirationYear . '/' . FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE);
-}
-
-/**
- * For a given membership, determine whether end_date is within the current year.
- * @param Array $membership An array of membership properties; this array is expected
- *  to have an element 'end_date' containing the value of civicrm_membership.end_date
- * @return Boolean
- */
-function _fpptamembertweaks_membership_expires_in_current_year(array $membership) {
-  $currentYear = date('Y');
-  $membershipEndDateYear = date('Y', strtotime($membership['end_date']));
-  return ($membershipEndDateYear == $currentYear);
 }
 
 function _fpptamembertweaks_membership_is_protected_type($membership) {

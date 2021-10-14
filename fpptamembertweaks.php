@@ -30,14 +30,81 @@ function fpptamembertweaks_civicrm_pre($op, $objectName, $objectId, &$params) {
       // and this is not a test transaction
       && (!$params['is_test'])
     ) {
-      // Ensure we're only doing this for associate and pension_board memberships.
-      $countValidMembershipTypes = civicrm_api3('MembershipType', 'getcount', [
-        'name' => ['IN' => ["associate", "pension board"]],
-        'id' => $objectRef->membership_type_id,
-      ]);
-      if ($countValidMembershipTypes) {
-        $params['end_date'] = date('Y', strtotime('+1 year')) . '1231';
+      if (_fpptamembertweaks_membership_is_protected_type($objectRef)) {
+        $params['end_date'] = _fpptamembertweaks_get_end_date_for_current_renewal_period();
       }
+    }
+  }
+}
+
+/**
+ * Implements hook_civicrm_alterTemplateFile().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_alterTemplateFile
+ */
+function fpptamembertweaks_civicrm_alterTemplateFile($formName, &$form, $context, &$tplName) {
+  if ($form->fpptamembertweaks_hide_form) {
+    // Per calculations in the buildAmount hook, we have no membership types to
+    // offer, so we will hide the form entirely. User-facing alert messages 
+    // were set in the buildAmount hook.
+    $tplName = '';
+  }
+}
+
+/**
+ * Implements hook_civicrm_buildAmount().
+ *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_buildAmount
+ */
+function fpptamembertweaks_civicrm_buildAmount( $pageType, &$form, &$amount ) {
+  // Only on the contribution page main form:
+  if (get_class($form) == 'CRM_Contribute_Form_Contribution_Main') {
+    // Shorthand var for all membership types originally available on this form.
+    $totalMembershipTypes = [];
+    // Shorthand var for all disallowed membership types.
+    $disallowedMembershipTypes = [];
+    // Shorthand var for the actual disallowed memberships.
+    $disallowedMemberships = [];
+    // Loop through all price fields looking for any that are tied to memberships.
+    foreach ($amount as $fieldId => &$field) {
+      foreach($field['options'] as $optionId => $option) {
+        $membershipTypeId = $option['membership_type_id'];
+        if (!empty($option['membership_type_id'])) {
+          // Note that we originally offered this membership type.
+          $totalMembershipTypes[] = $membershipTypeId;
+          // Get any memberships of this type for the current user.
+          $userMembershipsOfType = _fpptamembertweaks_get_user_memberships_of_type($membershipTypeId);
+          foreach ($userMembershipsOfType as $membership) {
+            if (_fpptamembertweaks_is_renewal_disallowed($membership)) {
+              // If this membership is not ready for renewal:
+              // Note that this membership type should be removed.
+              $disallowedMembershipTypes[] = $membershipTypeId;
+              // Store the membership for reference below.
+              $disallowedMemberships[] = $membership;
+              // Remove the membership type as an option in the form.
+              unset($field['options'][$optionId]);
+            }
+          }
+        }
+      }    
+    }
+    // Add user-facing messages for any disallowed memberships.
+    foreach ($disallowedMemberships as $membership) { 
+      $membershipTypeName = civicrm_api3('MembershipType', 'getvalue', [
+        'return' => "name",
+        'id' => $membership['membership_type_id'],
+      ]);
+      CRM_Core_Session::setStatus(ts('Your <strong>%1</strong> membership does not expire until %2. Please renew again after %3.', [
+        '1' => $membershipTypeName,
+        '2' => CRM_Utils_Date::customFormat($membership['end_date'], $config->dateformatTime),
+        '3' => CRM_Utils_Date::customFormat(date('Y-m-d', _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership)), $config->dateformatTime),
+      ]));
+    }
+    
+    if (!empty($totalMembershipTypes) && (count(array_unique($totalMembershipTypes)) == count(array_unique($disallowedMembershipTypes)))) {
+      // If there are membership types on this form, but they've all been removed,
+      // set a flag to hide the form. We'll do this in the alterTemplateFile hook.
+      $form->fpptamembertweaks_hide_form = TRUE;
     }
   }
 }
@@ -50,32 +117,19 @@ function fpptamembertweaks_civicrm_pre($op, $objectName, $objectId, &$params) {
 function fpptamembertweaks_civicrm_pageRun($page) {
   $pageName = $page->getVar('_name');
   if ($pageName == 'CRM_Contact_Page_View_UserDashBoard') {
-    // Strip Active Memberships of any CPPT-type memberships.
+    // Hide renewal where appropriate for active memberships
     $activeMembers = $page->get_template_vars('activeMembers');
     foreach ($activeMembers as &$activeMember) {
-      $hideRenew = TRUE;
-      if (
-        _fpptamembertweaks_is_current_year_renewal_open()
-        && _fpptamembertweaks_membership_expires_current_year_or_before($activeMember)
-      ) {
-        $hideRenew = FALSE;
-      }
-      if ($hideRenew) {
+      if (_fpptamembertweaks_is_renewal_disallowed($activeMember)) {
         unset($activeMember['renewPageId']);
       }
     }
     $page->assign('activeMembers', $activeMembers);
 
+    // Hide renewal where appropriate for inactive memberships
     $inActiveMembers = $page->get_template_vars('inActiveMembers');
     foreach ($inActiveMembers as &$inActiveMember) {
-      $hideRenew = TRUE;
-      if (
-        _fpptamembertweaks_is_current_year_renewal_open()
-        && _fpptamembertweaks_membership_expires_current_year_or_before($inActiveMember)
-      ) {
-        $hideRenew = FALSE;
-      }
-      if ($hideRenew) {
+      if (_fpptamembertweaks_is_renewal_disallowed($inActiveMember)) {
         unset($inActiveMember['renewPageId']);
       }
     }
@@ -86,7 +140,7 @@ function fpptamembertweaks_civicrm_pageRun($page) {
     // If we don't use addString(), this string may not be replaced using ts() in JavaScript.
     CRM_Core_Resources::singleton()->addString('Renew Now');
     $renewForNextYearLabel = E::ts('Renew for %1', [
-      '1' => date('Y', strtotime('+1 year')),
+      '1' => date('Y', strtotime(_fpptamembertweaks_get_end_date_for_current_renewal_period())),
     ]);
     CRM_Core_Resources::singleton()->addVars('fpptamembertweaks', ['renewForNextYearLabel' => $renewForNextYearLabel]);
     CRM_Core_Resources::singleton()->addScriptFile('com.joineryhq.fpptamembertweaks', 'js/CRM_Contact_Page_View_UserDashBoard.js');
@@ -244,19 +298,80 @@ function _fpptamembertweaks_get_current_year_renewal_open_timestamp() {
  * Determine whether or not we have passed the renewals open date for the current year.
  * @return Boolean
  */
-function _fpptamembertweaks_is_current_year_renewal_open() {
-  return (time() > _fpptamembertweaks_get_current_year_renewal_open_timestamp());
+function _fpptamembertweaks_is_current_year_renewal_cutoff_passed() {
+  return (time() >= _fpptamembertweaks_get_current_year_renewal_open_timestamp());
 }
 
 /**
- * For a given membership, determine whether end_date is on or before the last
+ * For a given membership, determine whether end_date is after the last
  * day of the current year.
  * @param Array $membership An array of membership properties; this array is expected
  *  to have an element 'end_date' containing the value of civicrm_membership.end_date
  * @return Boolean
  */
-function _fpptamembertweaks_membership_expires_current_year_or_before($membership) {
+function _fpptamembertweaks_membership_expires_after_current_year(array $membership) {
   $lastDayOfCurrentYear = strtotime('12/31');
   $endDate = strtotime($membership['end_date']);
-  return ($endDate <= $lastDayOfCurrentYear);
+  return ($endDate > $lastDayOfCurrentYear);
+}
+
+function _fpptamembertweaks_get_end_date_for_current_renewal_period() {
+  // Is today on or after the cutoff date?
+  if (_fpptamembertweaks_is_current_year_renewal_cutoff_passed()) {
+    // End date for renewal period is dec. 31 of next year.
+    $endDate = date('Y', strtotime('+1 year')) . '1231';
+  }
+  else {
+    // End date for renewal period is dec. 31 of this year.
+    $endDate = date('Y') . '1231';
+  }
+  return $endDate;
+}
+
+function _fpptamembertweaks_is_renewal_disallowed(array $membership) {
+  // If the current time is less than the time when renewal is allowed, then disallow.
+  $disallow = (time() < _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership));
+  return $disallow;
+}
+
+
+function _fpptamembertweaks_get_timestamp_when_membership_can_renew(array $membership) {
+  if (!_fpptamembertweaks_membership_is_protected_type($membership)) {
+    // If this is not a protected type, we'll let them renew anytime.
+    $timestamp = time();
+  }
+  // Otherwise, they can renew after renewal-open-date in the year of their expiration.
+  $expirationYear = date('Y', strtotime($membership['end_date']));
+  return strtotime($expirationYear . '/' . FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE);
+}
+
+/**
+ * For a given membership, determine whether end_date is within the current year.
+ * @param Array $membership An array of membership properties; this array is expected
+ *  to have an element 'end_date' containing the value of civicrm_membership.end_date
+ * @return Boolean
+ */
+function _fpptamembertweaks_membership_expires_in_current_year(array $membership) {
+  $currentYear = date('Y');
+  $membershipEndDateYear = date('Y', strtotime($membership['end_date']));
+  return ($membershipEndDateYear == $currentYear);
+}
+
+function _fpptamembertweaks_membership_is_protected_type($membership) {
+  // convert membership to array if it's an object.
+  $membership = (array)$membership;
+  // Ensure we're only doing this for associate and pension_board memberships.
+  $protectedTypeIds = [1, 2];
+  return (in_array(strtolower($membership['membership_type_id']), $protectedTypeIds));
+}
+
+
+function _fpptamembertweaks_get_user_memberships_of_type($membershipTypeId) {
+  $cid = CRM_Core_Session::singleton()->getLoggedInContactID();
+  $membershipGet = civicrm_api3('Membership', 'get', [
+    'contact_id' => $cid,
+    'membership_type_id' => $membershipTypeId,
+  ]);
+  return $membershipGet['values'];
+  
 }

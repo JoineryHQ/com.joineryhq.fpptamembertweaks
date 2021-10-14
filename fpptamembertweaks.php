@@ -45,7 +45,7 @@ function fpptamembertweaks_civicrm_pre($op, $objectName, $objectId, &$params) {
 function fpptamembertweaks_civicrm_alterTemplateFile($formName, &$form, $context, &$tplName) {
   if ($form->fpptamembertweaks_hide_form) {
     // Per calculations in the buildAmount hook, we have no membership types to
-    // offer, so we will hide the form entirely. User-facing alert messages 
+    // offer, so we will hide the form entirely. User-facing alert messages
     // were set in the buildAmount hook.
     $tplName = '';
   }
@@ -86,10 +86,10 @@ function fpptamembertweaks_civicrm_buildAmount( $pageType, &$form, &$amount ) {
             }
           }
         }
-      }    
+      }
     }
     // Add user-facing messages for any disallowed memberships.
-    foreach ($disallowedMemberships as $membership) { 
+    foreach ($disallowedMemberships as $membership) {
       $membershipTypeName = civicrm_api3('MembershipType', 'getvalue', [
         'return' => "name",
         'id' => $membership['membership_type_id'],
@@ -100,7 +100,7 @@ function fpptamembertweaks_civicrm_buildAmount( $pageType, &$form, &$amount ) {
         '3' => CRM_Utils_Date::customFormat(date('Y-m-d', _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership)), $config->dateformatTime),
       ]));
     }
-    
+
     if (!empty($totalMembershipTypes) && (count(array_unique($totalMembershipTypes)) == count(array_unique($disallowedMembershipTypes)))) {
       // If there are membership types on this form, but they've all been removed,
       // set a flag to hide the form. We'll do this in the alterTemplateFile hook.
@@ -348,5 +348,5 @@ function _fpptamembertweaks_get_user_memberships_of_type($membershipTypeId) {
     'membership_type_id' => $membershipTypeId,
   ]);
   return $membershipGet['values'];
-  
+
 }

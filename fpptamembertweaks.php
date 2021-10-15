@@ -53,22 +53,29 @@ function fpptamembertweaks_civicrm_buildAmount($pageType, &$form, &$amount) {
   if (get_class($form) == 'CRM_Contribute_Form_Contribution_Main') {
     // Initialize array of vars to pass to JS.
     $jsVars = [];
-    // Get list of disallowed types per org, and pass to JS.
-    $jsVars['disallowedMembershipTypeMessagesPerOrg'] = _fpptamembertweaks_get_disallowed_membership_type_messages_per_org_in_form($form);
-    // Add JS file.
-    CRM_Core_Resources::singleton()->addScriptFile('com.joineryhq.fpptamembertweaks', 'js/CRM_Contribute_Form_Contribution_Main.js');
     // Loop through all price fields looking for any that are tied to memberships.
     foreach ($amount as $fieldId => &$field) {
       foreach ($field['options'] as $optionId => $option) {
-        if (!empty($option['membership_type_id'])) {
-          // Specify field id in jsvars, so JS code can identify this field.
-          $jsVars['membershipTypeFieldId'] = $fieldId;
-          // Assume there's only one such field, so break out of both foreach loops.
-          break 2;
+        if ($optionMembershipTypeId = $option['membership_type_id']) {
+          if (in_array($optionMembershipTypeId, FPPTAMEMBERTWEAKS_PROTECTED_MEMBERSHIP_TYPE_IDS)) {
+            // Note that we've found a field with membership options for protected member types.
+            $protectedMembershipTypeFieldId = $fieldId;
+            // Specify field id in jsvars, so JS code can identify this field.
+            $jsVars['membershipTypeFieldId'] = $protectedMembershipTypeFieldId;
+            // Assume there's only one such field, so break out of both foreach loops.
+            break 2;
+          }
         }
       }
     }
-    CRM_Core_Resources::singleton()->addVars('fpptamembertweaks', $jsVars);
+    // If we have a field with membership options for protected member types:
+    if (!empty($protectedMembershipTypeFieldId)) {
+      // Get list of disallowed types per org, and pass to JS.
+      $jsVars['disallowedMembershipTypeMessagesPerOrg'] = _fpptamembertweaks_get_disallowed_membership_type_messages_per_org_in_form($form);
+      // Add JS file and vars.
+      CRM_Core_Resources::singleton()->addScriptFile('com.joineryhq.fpptamembertweaks', 'js/CRM_Contribute_Form_Contribution_Main.js');
+      CRM_Core_Resources::singleton()->addVars('fpptamembertweaks', $jsVars);
+    }
 
   }
 }
@@ -369,26 +376,28 @@ function _fpptamembertweaks_get_disallowed_membership_type_messages_per_org_in_f
     ]);
   }
 
-  // Get all the organization IDs for "on behalf" existing organizations in the form.
-  $el = $form->getElement('onbehalfof_id');
-  $options = $el->_options;
-  // Loop through these options.
-  foreach ($options as $option) {
-    $orgCid = $option['attr']['value'];
-    // Get all (protected-type) memberships for this organization.
-    $membershipGet = civicrm_api3('Membership', 'get', [
-      'contact_id' => $orgCid,
-      'membership_type_id' => ['IN' => FPPTAMEMBERTWEAKS_PROTECTED_MEMBERSHIP_TYPE_IDS],
-    ]);
-    foreach ($membershipGet['values'] as $membership) {
-      // For each found membership, if it's disallowed for renewing, formulate
-      // a message to inform the user of such.
-      if (_fpptamembertweaks_is_renewal_disallowed($membership)) {
-        $disallowedMembershipTypeMessagesPerOrg[$orgCid][$membership['membership_type_id']] = E::ts('The <strong>%1</strong> membership for this organization does not expire until %2. You may not renew it until %3.', [
-          '1' => $membershipTypeNames[$membership['membership_type_id']],
-          '2' => CRM_Utils_Date::customFormat($membership['end_date']),
-          '3' => CRM_Utils_Date::customFormat(date('Y-m-d', _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership))),
-        ]);
+  // Get all the organization IDs for "on behalf" existing organizations in the form (assuming form has "on behalf" enabled); without it, this feature won't do anything at all.
+  if ($form->elementExists('onbehalfof_id')) {
+    $el = $form->getElement('onbehalfof_id');
+    $options = $el->_options;
+    // Loop through these options.
+    foreach ($options as $option) {
+      $orgCid = $option['attr']['value'];
+      // Get all (protected-type) memberships for this organization.
+      $membershipGet = civicrm_api3('Membership', 'get', [
+        'contact_id' => $orgCid,
+        'membership_type_id' => ['IN' => FPPTAMEMBERTWEAKS_PROTECTED_MEMBERSHIP_TYPE_IDS],
+      ]);
+      foreach ($membershipGet['values'] as $membership) {
+        // For each found membership, if it's disallowed for renewing, formulate
+        // a message to inform the user of such.
+        if (_fpptamembertweaks_is_renewal_disallowed($membership)) {
+          $disallowedMembershipTypeMessagesPerOrg[$orgCid][$membership['membership_type_id']] = E::ts('The <strong>%1</strong> membership for this organization does not expire until %2. You may not renew it until %3.', [
+            '1' => $membershipTypeNames[$membership['membership_type_id']],
+            '2' => CRM_Utils_Date::customFormat($membership['end_date']),
+            '3' => CRM_Utils_Date::customFormat(date('Y-m-d', _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership))),
+          ]);
+        }
       }
     }
   }

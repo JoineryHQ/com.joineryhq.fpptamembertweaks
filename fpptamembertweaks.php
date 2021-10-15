@@ -300,7 +300,9 @@ function _fpptamembertweaks_get_end_date_for_current_renewal_period() {
  */
 function _fpptamembertweaks_is_renewal_disallowed(array $membership) {
   // If the current time is less than the time when renewal is allowed, then disallow.
-  $disallow = (time() < _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership));
+  $now = time();
+  $canRenewTimestamp = _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership);
+  $disallow = ($now < $canRenewTimestamp);
   return $disallow;
 }
 
@@ -318,7 +320,8 @@ function _fpptamembertweaks_get_timestamp_when_membership_can_renew(array $membe
   }
   // Otherwise, they can renew after renewal-open-date in the year of their expiration.
   $expirationYear = date('Y', strtotime($membership['end_date']));
-  return strtotime($expirationYear . '/' . FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE);
+  $canRenewTimestamp = strtotime($expirationYear . '/' . FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE);
+  return $canRenewTimestamp;
 }
 
 /**

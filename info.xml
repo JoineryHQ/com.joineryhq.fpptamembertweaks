@@ -18,7 +18,7 @@
   <version>1.0.1</version>
   <develStage>beta</develStage>
   <compatibility>
-    <ver>5.0</ver>
+    <ver>5.51</ver>
   </compatibility>
   <comments>Developed for FPPTA by Joinery.</comments>
   <classloader>
@@ -26,5 +26,9 @@
   </classloader>
   <civix>
     <namespace>CRM/Fpptamembertweaks</namespace>
+    <format>25.10.2</format>
   </civix>
+  <mixins>
+    <mixin>scan-classes@1.0.0</mixin>
+  </mixins>
 </extension>

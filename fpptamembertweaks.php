@@ -36,7 +36,7 @@ function fpptamembertweaks_civicrm_pre($op, $objectName, $objectId, &$params) {
       // and this is not a test transaction
       && (!$params['is_test'])
     ) {
-      if (_fpptamembertweaks_membership_is_protected_type($objectRef)) {
+      if (_fpptamembertweaks_membership_is_protected_type($params)) {
         $params['end_date'] = _fpptamembertweaks_get_end_date_for_current_renewal_period();
       }
     }

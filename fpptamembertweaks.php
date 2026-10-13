@@ -9,12 +9,6 @@ use CRM_Fpptamembertweaks_ExtensionUtil as E;
  * Month-day (MM/DD) of the date each year on which membership renewals should
  * open.
  */
-define('FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE', '10/15');
-
-/**
- * Month-day (MM/DD) of the date each year on which membership renewals should
- * open.
- */
 define('FPPTAMEMBERTWEAKS_PROTECTED_MEMBERSHIP_TYPE_IDS', [1, 2]);
 
 /**
@@ -88,25 +82,21 @@ function fpptamembertweaks_civicrm_buildAmount($pageType, &$form, &$amount) {
 function fpptamembertweaks_civicrm_pageRun($page) {
   $pageName = $page->getVar('_name');
   if ($pageName == 'CRM_Contact_Page_View_UserDashBoard') {
-    // Hide renewal where appropriate for active memberships
+    // Show/Hide renewal link where appropriate for active memberships
     $activeMembers = $page->get_template_vars('activeMembers');
     foreach ($activeMembers as &$activeMember) {
-      if (_fpptamembertweaks_is_renewal_disallowed($activeMember)) {
-        unset($activeMember['renewPageId']);
-      }
+      _fpptamembertweaks_alter_renewal_links($activeMember);
     }
     $page->assign('activeMembers', $activeMembers);
 
-    // Hide renewal where appropriate for inactive memberships
+    // Show/Hide renewal link where appropriate for inactive memberships
     $inActiveMembers = $page->get_template_vars('inActiveMembers');
     foreach ($inActiveMembers as &$inActiveMember) {
-      if (_fpptamembertweaks_is_renewal_disallowed($inActiveMember)) {
-        unset($inActiveMember['renewPageId']);
-      }
+      _fpptamembertweaks_alter_renewal_links($inActiveMember);
     }
     $page->assign('inActiveMembers', $inActiveMembers);
 
-    // Replace "Renew Now" in renew links with "Renew for YYYY", where YYYY is a
+    // Prepare to replace (via JS) "Renew Now" in renew links with "Renew for YYYY", where YYYY is a
     // 4-digit representation of the coming year.
     // If we don't use addString(), this string may not be replaced using ts() in JavaScript.
     CRM_Core_Resources::singleton()->addString('Renew Now');
@@ -146,12 +136,12 @@ function fpptamembertweaks_civicrm_enable() {
 }
 
 /**
- * Get the unix timestamp of midnight beginning the day of FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE
+ * Get the unix timestamp of midnight beginning the day of 'fpptamembertweaks_renewal_open_date'
  * in the current year.
  * @return Boolean
  */
 function _fpptamembertweaks_get_current_year_renewal_open_timestamp() {
-  return strtotime(FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE);
+  return strtotime(CRM_Fpptamembertweaks_Utils_Settings::get('fpptamembertweaks_renewal_open_date'));
 }
 
 /**
@@ -182,12 +172,35 @@ function _fpptamembertweaks_get_end_date_for_current_renewal_period() {
 }
 
 /**
+ * Determine whether a given membership can be renewed, based on whether its primary
+ * contact is an orgnization.
+ *
+ * @param array $membership A membership as returned by api3 membership.getSingle
+ *   -- must have 'owner_membership_id' array key.
+ * @return boolean
+ */
+function _fpptamembertweaks_is_renewal_disallowed_per_primary_member(array $membership) {
+  if (empty($membership['owner_membership_id'])) {
+    // owner_membership_id empty or missing, so return false.
+    return FALSE;
+  }
+  $membershipGet = civicrm_api3('Membership', 'get', [
+    'sequential' => 1,
+    'id' => ($membership['owner_membership_id'] ?? -1),
+    'api.Contact.get' => ['id' => "\$value.contact_id", 'contact_type' => "organization"],
+  ]);
+
+  $ret = (bool) ($membershipGet['values'][0]['api.Contact.get']['id'] ?? FALSE);
+  return $ret;
+}
+
+/**
  * Determine whether a given membership can be renewed today.
  *
  * @param array $membership A membership as returned by api3 membership.getSingle
  * @return boolean
  */
-function _fpptamembertweaks_is_renewal_disallowed(array $membership) {
+function _fpptamembertweaks_is_renewal_disallowed_per_date(array $membership) {
   // If the current time is less than the time when renewal is allowed, then disallow.
   $now = time();
   $canRenewTimestamp = _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership);
@@ -209,7 +222,7 @@ function _fpptamembertweaks_get_timestamp_when_membership_can_renew(array $membe
   }
   // Otherwise, they can renew after renewal-open-date in the year of their expiration.
   $expirationYear = date('Y', strtotime($membership['end_date']));
-  $canRenewTimestamp = strtotime($expirationYear . '/' . FPPTAMEMBERTWEAKS_RENEWAL_OPEN_DATE);
+  $canRenewTimestamp = strtotime($expirationYear . '/' . CRM_Fpptamembertweaks_Utils_Settings::get('fpptamembertweaks_renewal_open_date'));
   return $canRenewTimestamp;
 }
 
@@ -228,6 +241,18 @@ function _fpptamembertweaks_membership_is_protected_type($membership) {
   // Ensure we're only doing this for associate and pension_board memberships.
   $protectedTypeIds = FPPTAMEMBERTWEAKS_PROTECTED_MEMBERSHIP_TYPE_IDS;
   return (in_array(strtolower($membership['membership_type_id']), $protectedTypeIds));
+}
+
+function _fpptamembertweaks_alter_renewal_links(&$membership) {
+  if (
+    (! _fpptamembertweaks_is_renewal_disallowed_per_primary_member($membership))
+    && (! _fpptamembertweaks_is_renewal_disallowed_per_date($membership))
+  ) {
+    unset($membership['renewMembershipLink']);
+  }
+  else {
+    $membership['renewMembershipLink'] = CRM_Utils_System::url('civicrm/contribute/transact', "reset=1&id={$membership['renewPageId']}&mid={$membership['id']}", TRUE, NULL, FALSE, TRUE);
+  }
 }
 
 /**
@@ -283,7 +308,7 @@ function _fpptamembertweaks_get_disallowed_membership_type_messages_per_org_in_f
       foreach ($membershipGet['values'] as $membership) {
         // For each found membership, if it's disallowed for renewing, formulate
         // a message to inform the user of such.
-        if (_fpptamembertweaks_is_renewal_disallowed($membership)) {
+        if (_fpptamembertweaks_is_renewal_disallowed_per_date($membership)) {
           $disallowedMembershipTypeMessagesPerOrg[$orgCid][$membership['membership_type_id']] = E::ts('The <strong>%1</strong> membership for this organization does not expire until %2. You may not renew it until %3.', [
             '1' => $membershipTypeNames[$membership['membership_type_id']],
             '2' => CRM_Utils_Date::customFormat($membership['end_date']),

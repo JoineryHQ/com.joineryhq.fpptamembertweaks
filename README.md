@@ -2,16 +2,19 @@
 
 Specialized membership-related CiviCRM modifications for FPPTA:
 
+* Defines a setting "Membership renewal open date" (e.g. "10/15") indicating
+  the day-of-year (as MM/DD) on which membership renewals are opened for the coming year.
 * When a user submits a paid contribution (i.e., paid via credit card) for membership
 renewal on an Associate or Pension Board membership, the end date of that membership
 is adjusted to Dec. 31 of the coming year. (Note that when a staff member alters a
-membership via back-end forms no custom behavior is applied so that, membership End Date
+membership via back-end forms no custom behavior is applied, so that membership End Date
 is saved as given.)
 * On the CiviCRM user dashboard (https://drupal.example.org/civicrm/user):
-  * For any given row under the Memberships section, the "Renew" link will be hidden
-    except where all of these criteria are met:
+  * For any given row under the Memberships section, the "Renew" link will be displayed
+    if and only if all of these criteria are met:
     * The membership End Date is on or before Dec. 31 of the current year.
-    * Today's date is after Oct. 15 in the current year.
+    * Today's date is after "Membership renewal open date" in the current year.
+    * The membership is on-behalf-of an organization.
   * Any displayed "Renew" link will be labeled "Renew for YYYY", where YYYY is a
     4-digit representation of the coming year (e.g. in 2021 this link would be labeled "Renew for 2022".
 

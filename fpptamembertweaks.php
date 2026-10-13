@@ -77,6 +77,33 @@ function fpptamembertweaks_civicrm_buildAmount($pageType, &$form, &$amount) {
 /**
  * Implements hook_civicrm_pageRun().
  *
+ * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_buildForm
+ */
+function fpptamembertweaks_civicrm_buildForm($formName, &$form) {
+  if ($formName == 'CRM_Contribute_Form_Contribution_Main') {
+    // If a membership id is provided in query params, attempt to pre-set the
+    // on-behalf-of field to the appropriate organization, if any.
+    $mid = (CRM_Utils_Request::retrieve('mid', 'Positive', $form) ?: FALSE);
+    if (!$mid) {
+      return;
+    }
+    $membershipGet = civicrm_api3('Membership', 'get', [
+      'sequential' => 1,
+      'id' => ($mid ?? -1),
+      'api.Membership.get' => ['id' => "\$value.owner_membership_id"],
+    ]);
+    if ($ownerContactId = $membershipGet['values'][0]['api.Membership.get']['values'][0]['contact_id']) {
+      $defaultValues = [
+        'onbehalfof_id' => $ownerContactId,
+      ];
+      $form->setDefaults($defaultValues);
+    }
+  }
+}
+
+/**
+ * Implements hook_civicrm_pageRun().
+ *
  * @link https://docs.civicrm.org/dev/en/latest/hooks/hook_civicrm_pageRun
  */
 function fpptamembertweaks_civicrm_pageRun($page) {

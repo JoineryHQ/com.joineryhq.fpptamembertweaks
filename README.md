@@ -17,6 +17,11 @@ is saved as given.)
     * The membership is on-behalf-of an organization.
   * Any displayed "Renew" link will be labeled "Renew for YYYY", where YYYY is a
     4-digit representation of the coming year (e.g. in 2021 this link would be labeled "Renew for 2022".
+* On the membership renewal contribution page:
+  * If a membership id is provided in query params, attempt to pre-set the
+    on-behalf-of field to the appropriate organization, if any. (CiviCRM seem to
+    merely leave this selected on the first available option, which is likely to
+    be incorrect.)
 
 The extension is licensed under [GPL-3.0](LICENSE.txt).
 

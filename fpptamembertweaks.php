@@ -206,9 +206,9 @@ function _fpptamembertweaks_get_end_date_for_current_renewal_period() {
  *   -- must have 'owner_membership_id' array key.
  * @return boolean
  */
-function _fpptamembertweaks_is_renewal_disallowed_per_primary_member(array $membership) {
+function _fpptamembertweaks_is_renewal_allowed_per_primary_member(array $membership) {
   if (empty($membership['owner_membership_id'])) {
-    // owner_membership_id empty or missing, so return false.
+    // owner_membership_id empty or missing -- return FALSE.
     return FALSE;
   }
   $membershipGet = civicrm_api3('Membership', 'get', [
@@ -216,7 +216,6 @@ function _fpptamembertweaks_is_renewal_disallowed_per_primary_member(array $memb
     'id' => ($membership['owner_membership_id'] ?? -1),
     'api.Contact.get' => ['id' => "\$value.contact_id", 'contact_type' => "organization"],
   ]);
-
   $ret = (bool) ($membershipGet['values'][0]['api.Contact.get']['id'] ?? FALSE);
   return $ret;
 }
@@ -225,14 +224,14 @@ function _fpptamembertweaks_is_renewal_disallowed_per_primary_member(array $memb
  * Determine whether a given membership can be renewed today.
  *
  * @param array $membership A membership as returned by api3 membership.getSingle
- * @return boolean
+ * @return boolean True if allowed; otherwise false.
  */
-function _fpptamembertweaks_is_renewal_disallowed_per_date(array $membership) {
-  // If the current time is less than the time when renewal is allowed, then disallow.
+function _fpptamembertweaks_is_renewal_allowed_per_date(array $membership) {
+  // If the current time is greater than or equal to the time when renewal is allowed, then allow.
   $now = time();
   $canRenewTimestamp = _fpptamembertweaks_get_timestamp_when_membership_can_renew($membership);
-  $disallow = ($now < $canRenewTimestamp);
-  return $disallow;
+  $ret = ($now >= $canRenewTimestamp);
+  return $ret;
 }
 
 /**
@@ -270,15 +269,21 @@ function _fpptamembertweaks_membership_is_protected_type($membership) {
   return (in_array(strtolower($membership['membership_type_id']), $protectedTypeIds));
 }
 
-function _fpptamembertweaks_alter_renewal_links(&$membership) {
+/**
+ * Alter renewal links for a given membership, presumably as displayed in the
+ * Contact Dashboard.
+ *
+ * @param array $membership
+ */
+function _fpptamembertweaks_alter_renewal_links(array &$membership) {
   if (
-    (! _fpptamembertweaks_is_renewal_disallowed_per_primary_member($membership))
-    && (! _fpptamembertweaks_is_renewal_disallowed_per_date($membership))
+    _fpptamembertweaks_is_renewal_allowed_per_primary_member($membership)
+    && _fpptamembertweaks_is_renewal_allowed_per_date($membership)
   ) {
-    unset($membership['renewMembershipLink']);
+    $membership['renewMembershipLink'] = CRM_Utils_System::url('civicrm/contribute/transact', "reset=1&id={$membership['renewPageId']}&mid={$membership['id']}", TRUE, NULL, FALSE, TRUE);
   }
   else {
-    $membership['renewMembershipLink'] = CRM_Utils_System::url('civicrm/contribute/transact', "reset=1&id={$membership['renewPageId']}&mid={$membership['id']}", TRUE, NULL, FALSE, TRUE);
+    unset($membership['renewMembershipLink']);
   }
 }
 
@@ -335,7 +340,7 @@ function _fpptamembertweaks_get_disallowed_membership_type_messages_per_org_in_f
       foreach ($membershipGet['values'] as $membership) {
         // For each found membership, if it's disallowed for renewing, formulate
         // a message to inform the user of such.
-        if (_fpptamembertweaks_is_renewal_disallowed_per_date($membership)) {
+        if (! _fpptamembertweaks_is_renewal_allowed_per_date($membership)) {
           $disallowedMembershipTypeMessagesPerOrg[$orgCid][$membership['membership_type_id']] = E::ts('The <strong>%1</strong> membership for this organization does not expire until %2. You may not renew it until %3.', [
             '1' => $membershipTypeNames[$membership['membership_type_id']],
             '2' => CRM_Utils_Date::customFormat($membership['end_date']),

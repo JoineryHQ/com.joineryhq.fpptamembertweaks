@@ -207,13 +207,14 @@ function _fpptamembertweaks_get_end_date_for_current_renewal_period() {
  * @return boolean
  */
 function _fpptamembertweaks_is_renewal_allowed_per_primary_member(array $membership) {
-  if (empty($membership['owner_membership_id'])) {
+  $mid = $membership['owner_membership_id'] ?? $membership['id'];
+  if (empty($mid)) {
     // owner_membership_id empty or missing -- return FALSE.
     return FALSE;
   }
   $membershipGet = civicrm_api3('Membership', 'get', [
     'sequential' => 1,
-    'id' => ($membership['owner_membership_id'] ?? -1),
+    'id' => ($mid ?? -1),
     'api.Contact.get' => ['id' => "\$value.contact_id", 'contact_type' => "organization"],
   ]);
   $ret = (bool) ($membershipGet['values'][0]['api.Contact.get']['id'] ?? FALSE);
